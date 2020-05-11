@@ -72,7 +72,7 @@ class GraphDataSiamese(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         index = self.indices[index]
-        N_nodes_max = self.N_nodes_max
+        #N_nodes_max = self.N_nodes_max
         #04
         N_nodes_04 = self.adj_list04[index].shape[0]
         graph_support_04 = np.zeros(self.N_nodes_max)
@@ -158,7 +158,7 @@ class DataReader():
         shapes = [len(adj) for adj in data['adj_list']]
         labels = data['targets']  # graph class labels
         labels -= np.min(labels)  # to start from 0
-        N_nodes_max = np.max(shapes)
+        # N_nodes_max = np.max(shapes)
 
         classes = np.unique(labels)
         n_classes = len(classes)
@@ -283,7 +283,7 @@ class DataReader():
 if __name__ == '__main__':
     batch_size = 32
     dataset = 'ign_2004'
-    dataset2 = 'ign_2019'
+    dataset2 = 'ign_2004_shifted'
     model_name = 'gcn'  # 'gcn', 'unet'
     device = 'cpu'  # 'cuda', 'cpu'
     visualize = True
@@ -318,6 +318,7 @@ if __name__ == '__main__':
             loaders.append(loader)
     train_loader = loaders[0]
     for batch_idx, data in enumerate(train_loader):
-            for i in range(len(data[0])):
-                data[0][i], data[1][i] = data[0][i], data[1][i]
-            data
+#            for i in range(len(data[0])):
+             assert  np.allclose(data[0][4],data[1][4])
+
+
