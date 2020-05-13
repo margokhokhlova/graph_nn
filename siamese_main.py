@@ -102,7 +102,7 @@ if __name__ == '__main__':
                         help='Name of the matching dataset, should correspond to the folder with data')
     parser.add_argument('--testing_dataset', type=str, default='ign_2004',
                         help='Name of the matching dataset, should correspond to the folder with data')
-    parser.add_argument('--emb_dim', type=int, default=128,
+    parser.add_argument('--emb_dim', type=int, default=256,
                         help='Feature output size (default: 128')
     parser.add_argument('--hidden_filters', type=list, default=[128, 256],
                         help='num of gcn layers')
@@ -128,7 +128,7 @@ if __name__ == '__main__':
                         help='num of threads')
     parser.add_argument('--log_interval', type=int, default=10,
                         help='num of threads')
-    parser.add_argument('--n_folds', type=int, default=2,
+    parser.add_argument('--n_folds', type=int, default=1,
                         help='n-fold cross validation, default is 2 folds - single check of best val accuracy')
     parser.add_argument('--seed', type=int, default=111,
                         help='seed for reproduction')
@@ -187,7 +187,7 @@ if __name__ == '__main__':
         weight_decay=args.decay_lr,
         betas=(0.5, 0.999))
 
-    scheduler = lr_scheduler.MultiStepLR(optimizer, [20, 30], gamma=0.1)
+    scheduler = lr_scheduler.MultiStepLR(optimizer, [10, 15], gamma=0.1)
     best_test_loss = 10000 # to keep track of the validation_loss parameter
 
     def train(train_loader, epoch):
@@ -218,7 +218,8 @@ if __name__ == '__main__':
                     epoch, n_samples, len(train_loader.dataset),
                     100. * (batch_idx + 1) / len(train_loader), loss.item(), train_loss / n_samples,
                     time_iter / (batch_idx + 1)))
-        return train_loss/(batch_idx * args.batch_size)
+        train_loss /= n_samples
+        return train_loss/len(output_2004)
 
     #             break
 
@@ -240,12 +241,7 @@ if __name__ == '__main__':
         #         pred = output.detach().cpu().max(1, keepdim=True)[1]
 
         #         correct += pred.eq(data[4].detach().cpu().view_as(pred)).sum().item()
-
-        time_iter = time.time() - start
-
         test_loss /= n_samples
-
-        # acc = 100. * correct / n_samples
         print('Test set (epoch {}): Average loss: {:.4f}\n'.format(epoch,
                                                                  test_loss))
         global best_test_loss
@@ -271,17 +267,8 @@ if __name__ == '__main__':
                 (features2019, features_2019.data.numpy()))  # (features_2019.reshape(features_2019.shape[0], emb_dim))
         return np.array(features2004), np.array(features2019)
     def cross_val_map(loaders):
-        emb_2004 = []
-        emb_2019 = []
-        emb04, emb19 = calculate_features(loaders[0], args.emb_dim)
-        emb_2004.append(emb04)
-        emb_2019.append(emb19)
-        emb04, emb19 = calculate_features(loaders[1], args.emb_dim)
-        emb_2004.append(emb04)
-        emb_2019.append(emb19)
-        emb_2004 = np.asarray(emb_2004).reshape(-1, args.emb_dim)
-        emb_2019 = np.asarray(emb_2019).reshape(-1, args.emb_dim)
-        map = knn_distance_calculation(query=emb_2004, database=emb_2019, distance='cosine', N=5)
+        emb04, emb19 = calculate_features(loaders, args.emb_dim)
+        map = knn_distance_calculation(query=emb04, database=emb19, distance='cosine', N=5)
         return map
 
 
@@ -312,26 +299,37 @@ if __name__ == '__main__':
             loaders.append(loader)
             loaders_val.append(loader_val)
         for epoch in range(args.epochs):
-            tr_l =train(loaders[0], epoch)
-            ts_l = test(loaders[1], epoch)
+            tr_l =train(loaders[1], epoch)
+            ts_l = test(loaders_val[1], epoch)
             writer.add_scalar('Loss/train', tr_l, epoch)
             writer.add_scalar('Loss/val', ts_l, epoch)
-            map = cross_val_map(loaders)
-            w.write('epoch' + str(epoch) + 'map on val set is ' + str(map) + '\n')
-            writer.add_scalar('map@train', map, epoch)
-            map = cross_val_map(loaders_val)
+            map = cross_val_map(loaders[1])
+            w.write('epoch' + str(epoch) + 'map on train set is ' + str(map) + '\n')
+            writer.add_scalar('map/train', map, epoch)
+            map = cross_val_map(loaders_val[1])
             w.write('epoch'+str(epoch)+'map on val set is ' + str(map) + '\n')
-            writer.add_scalar('map@val', map, epoch)
+            writer.add_scalar('map/val', map, epoch)
             for param_group in optimizer.param_groups:
                 lr  = param_group['lr']
             writer.add_scalar('lr', lr, epoch)
     # second round of training using the second dataset:
-    lr_scheduler.base_lrs = [args.lr]
+    #lr_scheduler.base_lrs = [args.lr]
     for epoch in range(args.epochs, args.epochs*2):
-        train(loaders_val[0], epoch)
-        test(loaders_val[1], epoch)
-        map = cross_val_map(loaders)
+        tr_l = train(loaders_val[1], epoch)
+        ts_l = test(loaders[1], epoch)
+        map = cross_val_map(loaders[1])
+        writer.add_scalar('Loss/train', tr_l, epoch)
+        writer.add_scalar('Loss/val', ts_l, epoch)
+        map = cross_val_map(loaders[1])
+        w.write('epoch' + str(epoch) + 'map on train set is ' + str(map) + '\n')
+        writer.add_scalar('map/train', map, epoch)
+        map = cross_val_map(loaders_val[1])
         w.write('epoch'+str(epoch)+'map on val set is ' + str(map) + '\n')
+        writer.add_scalar('map/val', map, epoch)
+        for param_group in optimizer.param_groups:
+            lr  = param_group['lr']
+        writer.add_scalar('lr', lr, epoch)
+
 
     model.load_state_dict(torch.load('saved_model/siamese_gcn.pth'))
 
@@ -347,6 +345,6 @@ if __name__ == '__main__':
                                              num_workers=args.threads)
         test_loaders.append(test_loader)
 
-    map = cross_val_map(test_loaders)
+    map = cross_val_map(test_loaders[1])
     w.write('final map precision is ' + str(map)+'\n')
     w.close()
