@@ -84,10 +84,51 @@ class GCN(nn.Module):
 
     def forward(self, data):
         x = self.gconv(data)[0]
-        x = torch.max(x, dim=1)[0].squeeze()  # max pooling over nodes
+        x = torch.max(x, dim=1)[0].squeeze() #  # max pooling over nodes
         x = self.fc(x)
         return x
 
+# class GCN_unwrapped(nn.Module):
+#     '''
+#     Baseline Graph Convolutional Network with a stack of Graph Convolution Layers and global pooling over nodes.
+#     '''
+#
+#     def __init__(self,
+#                  in_features,
+#                  out_features,
+#                  filters=[64, 64, 64],
+#                  n_hidden=0,
+#                  dropout=0.2,
+#                  adj_sq=False,
+#                  scale_identity=False):
+#         super(GCN_unwrapped, self).__init__()
+#
+#         # Graph convolution layers
+#         self.gconv = nn.Sequential(*([GraphConv(in_features=in_features if layer == 0 else filters[layer - 1],
+#                                                 out_features=f,
+#                                                 activation=nn.ReLU(inplace=True),
+#                                                 adj_sq=adj_sq,
+#                                                 scale_identity=scale_identity) for layer, f in enumerate(filters)]))
+#
+#         # Fully connected layers
+#         fc = []
+#         if dropout > 0:
+#             fc.append(nn.Dropout(p=dropout))
+#         if n_hidden > 0:
+#             fc.append(nn.Linear(filters[-1], n_hidden))
+#             if dropout > 0:
+#                 fc.append(nn.Dropout(p=dropout))
+#             n_last = n_hidden
+#         else:
+#             n_last = filters[-1]
+#         fc.append(nn.Linear(n_last, out_features))
+#         self.fc = nn.Sequential(*fc)
+#
+#     def forward(self, data):
+#         x = self.gconv(data)[0]
+#         x = torch.mean(x, dim=1)[0].squeeze()  # max pooling over nodes
+#         x = self.fc(x)
+#         return x
 
 
 if __name__ == '__main__':
@@ -100,11 +141,13 @@ if __name__ == '__main__':
                         help='Name of the matching dataset, should correspond to the folder with data')
     parser.add_argument('--third_dataset', type=str, default='ign_2010',
                         help='Name of the matching dataset, should correspond to the folder with data')
-    parser.add_argument('--testing_dataset', type=str, default='ign_2004',
+    parser.add_argument('--first_test_dataset', type=str, default='ign_2019',
+                        help='Name of the matching dataset, should correspond to the folder with data')
+    parser.add_argument('--second_test_dataset', type=str, default='ign_2004',
                         help='Name of the matching dataset, should correspond to the folder with data')
     parser.add_argument('--emb_dim', type=int, default=256,
                         help='Feature output size (default: 128')
-    parser.add_argument('--hidden_filters', type=list, default=[128, 256],
+    parser.add_argument('--hidden_filters', type=list, default=[256,512],
                         help='num of gcn layers')
     parser.add_argument('--batch-size', type=int, default=35, metavar='N',
                         help='input training batch-size')
@@ -277,6 +320,8 @@ if __name__ == '__main__':
 
     # first round of training
     for fold_id in range(args.n_folds):
+        if fold_id==1:
+            break
         print('\nFOLD', fold_id)
         loaders = []
         loaders_val = []
