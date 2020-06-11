@@ -2,6 +2,8 @@
 
 ## Overview
 
+This repo was forked from bknyaz to test the possibility to use GCN with contrastive loss for graph mathing. New jupyter demo notebook was added along with a modified dataloader to handle a scenario, where a pair of graphs should have close embeddings.  NT-Xent loss was used. 
+
 <img src="figs/overview.png" height="192">
 
 My attempt to reproduce graph classification results from recent papers [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] using Graph U-Net. So far, my results using Graph U-Net are worse than the baseline (GCN).

@@ -363,24 +363,6 @@ if __name__ == '__main__':
             for param_group in optimizer.param_groups:
                 lr  = param_group['lr']
             writer.add_scalar('lr', lr, epoch)
-    # # second round of training using the second dataset:
-    # #lr_scheduler.base_lrs = [args.lr]
-    # for epoch in range(args.epochs, args.epochs*2):
-    #     tr_l = train(loaders_val[1], epoch)
-    #     ts_l = test(loaders[1], epoch)
-    #     map = cross_val_map(loaders[1])
-    #     writer.add_scalar('Loss/train', tr_l, epoch)
-    #     writer.add_scalar('Loss/val', ts_l, epoch)
-    #     map = cross_val_map(loaders[1])
-    #     w.write('epoch' + str(epoch) + 'map on train set is ' + str(map) + '\n')
-    #     writer.add_scalar('map/train', map, epoch)
-    #     map = cross_val_map(loaders_val[1])
-    #     w.write('epoch'+str(epoch)+'map on val set is ' + str(map) + '\n')
-    #     writer.add_scalar('map/val', map, epoch)
-    #     for param_group in optimizer.param_groups:
-    #         lr  = param_group['lr']
-    #     writer.add_scalar('lr', lr, epoch)
-
 
     model.load_state_dict(torch.load('saved_model/siamese_gcn.pth'))
 
@@ -398,4 +380,3 @@ if __name__ == '__main__':
 
     map = cross_val_map(test_loaders[1])
     w.write('final map precision is ' + str(map)+'\n')
-    w.close()
