@@ -137,13 +137,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--first_dataset', type=str, default='ign_2019',
                         help='Name of dataset number 1, should correspond to the folder with data')
-    parser.add_argument('--second_dataset', type=str, default='ign_2014',
+    parser.add_argument('--second_dataset', type=str, default='ign_2004',
                         help='Name of the matching dataset, should correspond to the folder with data')
-    parser.add_argument('--third_dataset', type=str, default='ign_2010',
-                        help='Name of the matching dataset, should correspond to the folder with data')
-    parser.add_argument('--first_test_dataset', type=str, default='ign_2019',
-                        help='Name of the matching dataset, should correspond to the folder with data')
-    parser.add_argument('--second_test_dataset', type=str, default='ign_2004',
+    parser.add_argument('--third_dataset', type=str, default='ign_2014',
+                        help='Name of the matching dataset which will be used for validation, should correspond to the folder with data')
+    parser.add_argument('--test_dataset', type=str, default='ign_2010',
                         help='Name of the matching dataset, should correspond to the folder with data')
     parser.add_argument('--emb_dim', type=int, default=256,
                         help='Feature output size (default: 128')
@@ -159,7 +157,7 @@ if __name__ == '__main__':
                         help='Learning rate decay (default: 1e-6')
     parser.add_argument('--tau', default=0.5, type=float,
                         help='Tau temperature smoothing (default 0.5)')
-    parser.add_argument('--log-dir', type=str, default='runs',
+    parser.add_argument('--log-dir', type=str, default='runs/',
                         help='logging directory (default: runs)')
     parser.add_argument('--device', default='cpu',
                         help='cpu or cuda')
@@ -187,19 +185,22 @@ if __name__ == '__main__':
     print('torch', torch.__version__)
 
     print('Loading data')
-    datareader19 = DataReader(data_dir='./data/%s/' % args.first_dataset.upper(),
+    datareader14 = DataReader(data_dir='./data/IGN_all/%s/' % args.third_dataset.upper(),
+                              rnd_state=np.random.RandomState(args.seed),
+                              folds=args.n_folds,
+                              use_cont_node_attr=True)
+    datareader04 = DataReader(data_dir='./data/IGN_all/%s/' % args.second_dataset.upper(),
+                              rnd_state=np.random.RandomState(args.seed),
+                              folds=args.n_folds,
+                              use_cont_node_attr=True)
+
+    datareader19 = DataReader(data_dir='./data/IGN_all/%s/' % args.first_dataset.upper(),
                             rnd_state=np.random.RandomState(args.seed),
                             folds=args.n_folds,
                             use_cont_node_attr=True)
-    datareader14 = DataReader(data_dir='./data/%s/' % args.second_dataset.upper(),
-                              rnd_state=np.random.RandomState(args.seed),
-                              folds=args.n_folds,
-                              use_cont_node_attr=True)
-    datareader10 = DataReader(data_dir='./data/%s/' % args.third_dataset.upper(),
-                              rnd_state=np.random.RandomState(args.seed),
-                              folds=args.n_folds,
-                              use_cont_node_attr=True)
-    datareader04 = DataReader(data_dir='./data/%s/' % args.testing_dataset.upper(),
+
+
+    datareader10 = DataReader(data_dir='./data/IGN_all/%s/' % args.test_dataset.upper(),
                               rnd_state=np.random.RandomState(args.seed),
                               folds=args.n_folds,
                               use_cont_node_attr=True)
@@ -295,12 +296,17 @@ if __name__ == '__main__':
 
 
     def calculate_features(train_loader, dims):
+        'just returns an array of the global graph features and corresponding GT indexes'
         features2004 = np.empty((0, dims))
         features2019 = np.empty((0, dims))
+        gt2004 = []
+        gt2019 = []
         for batch_idx, data in enumerate(train_loader):
             for i in range(len(data[0])):
                 data[0][i] = data[0][i].to(args.device)
                 data[1][i] = data[1][i].to(args.device)
+            gt2004.extend(list(data[0][4].numpy())) #save the GT values
+            gt2019.extend(list(data[1][4].numpy()))
             output_2004 = model(data[0])
             output_2019 = model(data[1])
             features_2004 = output_2004.detach().cpu()  # .max(1, keepdim=True)[1]
@@ -308,17 +314,17 @@ if __name__ == '__main__':
             features2004 = np.vstack((features2004, features_2004.data.numpy()))
             features2019 = np.vstack(
                 (features2019, features_2019.data.numpy()))  # (features_2019.reshape(features_2019.shape[0], emb_dim))
-        return np.array(features2004), np.array(features2019)
+        return np.array(features2004), np.array(features2019), gt2004, gt2019
     def cross_val_map(loaders):
-        emb04, emb19 = calculate_features(loaders, args.emb_dim)
-        map = knn_distance_calculation(query=emb04, database=emb19, distance='cosine', N=5)
+        'calculates the features of the graphs and then the map value'
+        emb04, emb19, gt04, gt19 = calculate_features(loaders, args.emb_dim)
+        map = knn_distance_calculation(query=emb04, database=emb19,gt_indexes2004 = gt04, gt_indexes2019=gt19, distance='cosine', N=5)
         return map
 
 
 
 
-
-    # first round of training
+   # first round of training
     for fold_id in range(args.n_folds):
         if fold_id==1:
             break
@@ -327,10 +333,10 @@ if __name__ == '__main__':
         loaders_val = []
         for split in ['train', 'test']:
             gdata = GraphDataSiamese(fold_id=fold_id,
-                                     datareader04=datareader19, datareader19=datareader14,
+                                     datareader04=datareader19, datareader19=datareader04,
                                      split=split)
             gdata_val = GraphDataSiamese(fold_id=fold_id,
-                                     datareader04=datareader19, datareader19=datareader10,
+                                     datareader04=datareader14, datareader19=datareader04,
                                      split=split) #second validation set to calculate map
 
             loader = torch.utils.data.DataLoader(gdata,
@@ -357,23 +363,23 @@ if __name__ == '__main__':
             for param_group in optimizer.param_groups:
                 lr  = param_group['lr']
             writer.add_scalar('lr', lr, epoch)
-    # second round of training using the second dataset:
-    #lr_scheduler.base_lrs = [args.lr]
-    for epoch in range(args.epochs, args.epochs*2):
-        tr_l = train(loaders_val[1], epoch)
-        ts_l = test(loaders[1], epoch)
-        map = cross_val_map(loaders[1])
-        writer.add_scalar('Loss/train', tr_l, epoch)
-        writer.add_scalar('Loss/val', ts_l, epoch)
-        map = cross_val_map(loaders[1])
-        w.write('epoch' + str(epoch) + 'map on train set is ' + str(map) + '\n')
-        writer.add_scalar('map/train', map, epoch)
-        map = cross_val_map(loaders_val[1])
-        w.write('epoch'+str(epoch)+'map on val set is ' + str(map) + '\n')
-        writer.add_scalar('map/val', map, epoch)
-        for param_group in optimizer.param_groups:
-            lr  = param_group['lr']
-        writer.add_scalar('lr', lr, epoch)
+    # # second round of training using the second dataset:
+    # #lr_scheduler.base_lrs = [args.lr]
+    # for epoch in range(args.epochs, args.epochs*2):
+    #     tr_l = train(loaders_val[1], epoch)
+    #     ts_l = test(loaders[1], epoch)
+    #     map = cross_val_map(loaders[1])
+    #     writer.add_scalar('Loss/train', tr_l, epoch)
+    #     writer.add_scalar('Loss/val', ts_l, epoch)
+    #     map = cross_val_map(loaders[1])
+    #     w.write('epoch' + str(epoch) + 'map on train set is ' + str(map) + '\n')
+    #     writer.add_scalar('map/train', map, epoch)
+    #     map = cross_val_map(loaders_val[1])
+    #     w.write('epoch'+str(epoch)+'map on val set is ' + str(map) + '\n')
+    #     writer.add_scalar('map/val', map, epoch)
+    #     for param_group in optimizer.param_groups:
+    #         lr  = param_group['lr']
+    #     writer.add_scalar('lr', lr, epoch)
 
 
     model.load_state_dict(torch.load('saved_model/siamese_gcn.pth'))
