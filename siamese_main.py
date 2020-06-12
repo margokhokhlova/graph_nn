@@ -231,7 +231,7 @@ if __name__ == '__main__':
         weight_decay=args.decay_lr,
         betas=(0.5, 0.999))
 
-    scheduler = lr_scheduler.MultiStepLR(optimizer, [10, 15], gamma=0.1)
+    scheduler = lr_scheduler.MultiStepLR(optimizer, [5, 5], gamma=0.1)
     best_test_loss = 10000 # to keep track of the validation_loss parameter
 
     def train(train_loader, epoch):

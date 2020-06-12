@@ -288,7 +288,7 @@ if __name__ == '__main__':
     device = 'cpu'  # 'cuda', 'cpu'
     visualize = True
     shuffle_nodes = False
-    n_folds = 10  # 10-fold cross validation
+    n_folds = 2  # 10-fold cross validation
     seed = 111
     threads = 0
 
@@ -320,5 +320,6 @@ if __name__ == '__main__':
     for batch_idx, data in enumerate(train_loader):
 #            for i in range(len(data[0])):
              assert  np.allclose(data[0][4],data[1][4])
+
 
 
