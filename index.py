@@ -85,4 +85,3 @@ if __name__ == '__main__':
 
     query_features = np.random.randn(15, 40)
     a = index.search(query_features)
-    qsqsdqs
