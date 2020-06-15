@@ -1,13 +1,9 @@
-import torch.utils
-import torch.utils.data
 import argparse
 from datetime import datetime
-from torch.utils.tensorboard import SummaryWriter
 from data_loader_siamese import *
-from loss import contrastive_loss
 from knn_check import knn_distance_calculation
 from models import GCN_unwrapped, GCN
-
+from index import BagOfNodesIndex
 # NN layers and models
 if __name__ == '__main__':
     # Experiment parameters
@@ -35,7 +31,7 @@ if __name__ == '__main__':
                         help='n-fold cross validation, default is 2 folds - single check of best val accuracy')
     parser.add_argument('--seed', type=int, default=111,
                         help='seed for reproduction')
-    parser.add_argument('--features', type=str, default = 'global',
+    parser.add_argument('--features', type=str, default = 'local',
                          help='global or local scenario? global descriptors matching or local with a BOW model')
     parser.add_argument('--visualize', type=bool, default=True,
                         help='visualize the data')
@@ -43,13 +39,13 @@ if __name__ == '__main__':
                         help='N in map@N')
 
     args = parser.parse_args()
-    datareader19 = DataReader(data_dir='./data/IGN_all_clean/%s/' % args.first_dataset.upper(),
+    datareader19 = DataReader(data_dir='./data/%s/' % args.first_dataset.upper(),
                             rnd_state=np.random.RandomState(args.seed),
                             folds=args.n_folds,
                             use_cont_node_attr=True)
 
 
-    datareader10 = DataReader(data_dir='./data/IGN_all_clean/%s/' % args.test_dataset.upper(),
+    datareader10 = DataReader(data_dir='./data/%s/' % args.test_dataset.upper(),
                               rnd_state=np.random.RandomState(args.seed),
                               folds=args.n_folds,
                               use_cont_node_attr=True)
@@ -68,6 +64,8 @@ if __name__ == '__main__':
 
         print('\nInitialize model')
         print(model)
+
+        #
     else:
         model = GCN(in_features=datareader19.data['features_dim'],
                               out_features=args.emb_dim,  # loaders[0].dataset.n_classes
@@ -86,6 +84,7 @@ if __name__ == '__main__':
         features2019 = np.empty((0, dims))
         gt2004 = []
         gt2019 = []
+
         for batch_idx, data in enumerate(train_loader):
             for i in range(len(data[0])):
                 data[0][i] = data[0][i].to(args.device)
@@ -101,13 +100,86 @@ if __name__ == '__main__':
                 (features2019, features_2019.data.numpy()))  # (features_2019.reshape(features_2019.shape[0], emb_dim))
         return np.array(features2004), np.array(features2019), gt2004, gt2019
 
+    def unwrap_unmask(features, masks, gt):
+        ''' function transforms the features from 3 dims [B, N, F] to 2 dims [N*B,F], N is number of nodes, B is
+         the batch size and F is feature dimention.
+        masks - whether the node is real or padded
+        gt - gt graph label
+        The artificial nodes are removed (we use zero-padding to train the model to have a constanst node number)
+        returns: new features, N*B ground truth labels.
+        '''
+        f =[] #an array to store the final features
+        new_gt = []
+        B,N,F = features.shape
+        for i in range(B):
+            feat = features[i]
+            masks_graph = masks[i]
+            for m in range(len(masks_graph)):
+                if masks_graph[m]!=0:
+                    f.append(feat[m,:])
+                    new_gt.append(gt[i])
+        return f, new_gt
+
+
+
+
+    def calculate_features_local(train_loader, dims):
+        'just returns an array of the global graph features and corresponding GT indexes'
+        features2004 = np.empty((0, dims))
+        features2019 = np.empty((0, dims))
+        gt2004 = []
+        gt2019 = []
+        for batch_idx, data in enumerate(train_loader):
+            for i in range(len(data[0])):
+                data[0][i] = data[0][i].to(args.device)
+                data[1][i] = data[1][i].to(args.device)
+            gt04 = data[0][4].numpy() # save the GT values
+            gt19 = data[1][4].numpy()
+            output_2004 = model(data[0])
+            output_2019 = model(data[1])
+            features_2004 = output_2004.detach().cpu().numpy()  # .max(1, keepdim=True)[1]
+            features_2019 = output_2019.detach().cpu().numpy()  # .max(1, keepdim=True)[1]
+            node_mask04 = data[0][2].numpy() # masks to remove the padding
+            node_mask19 = data[1][2].numpy()
+            # unwrap features and delete zero nodes
+            features_2004, gt_2004 = unwrap_unmask(features_2004,node_mask04, gt04)
+            features_2019, gt_2019 = unwrap_unmask(features_2019, node_mask19, gt19)
+            features2004 = np.vstack((features2004, features_2004))
+            features2019 = np.vstack((features2019, features_2019))  # (features_2019.reshape(features_2019.shape[0], emb_dim))
+            gt2004 += gt_2004
+            gt2019 += gt_2019
+        return np.array(features2004), np.array(features2019), gt2004, gt2019
+
     def cross_val_map(loaders):
         'calculates the features of the graphs and then the map value'
         emb04, emb19, gt04, gt19 = calculate_features(loaders, args.emb_dim)
         map = knn_distance_calculation(query=emb04, database=emb19,gt_indexes2004 = gt04, gt_indexes2019=gt19, distance='cosine', N=args.N)
         return map
+    def cross_val_map_local(loaders):
+        'calculates the features of the graphs and then the map value'
+        emb04, emb19, gt04, gt19 = calculate_features_local(loaders, 512) #TODO make it as a parameter
+        indexer =BagOfNodesIndex(dimension=emb04.shape[1])
+        indexer.train(emb04, gt04)
+        unique_graphs = np.unique(gt19)
+        for i in unique_graphs:
+            query_features = emb19[gt19==i]
+            answer = indexer.search(query_features)
 
-    model.load_state_dict(torch.load(args.load_model))
+
+        #map = knn_distance_calculation(query=emb04, database=emb19,gt_indexes2004 = gt04, gt_indexes2019=gt19, distance='cosine', N=args.N)
+        return map
+
+    if args.features =='global':
+        model.load_state_dict(torch.load(args.load_model))
+    else:
+        pretrained_dict = torch.load(args.load_model)
+        model_dict = model.state_dict()
+        # 1. filter out unnecessary keys
+        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+        # 2. overwrite entries in the existing state dict
+        model_dict.update(pretrained_dict)
+        # 3. load the new state dict
+        model.load_state_dict(model_dict)
     start = time.time()
     #final test accuracy calculation
     test_loaders = []
@@ -120,7 +192,9 @@ if __name__ == '__main__':
                                              # shuffle=split.find('train') >= 0,
                                              num_workers=args.threads)
         test_loaders.append(test_loader)
-
-    map = cross_val_map(test_loaders[1])
+    if args.features == 'local':
+        map = cross_val_map_local(test_loaders[1])
+    else:
+        map = cross_val_map(test_loaders[1])
     end = time.time()
     print('time to query all files %f seconds.' % (end - start))

@@ -21,7 +21,7 @@ class BagOfNodesIndex:
         N_BITS = 4 # Bits per subquantizer
         self.index = faiss.IndexIVFPQ(coarse_quantizer, dimension, N_CENTROIDS, CODE_SIZE, N_BITS)
         self.index_ownership = []
-        self.k = 3
+        self.k = 5
         self.size = 0
 
     def train(self, features, ownership):
@@ -84,4 +84,9 @@ if __name__ == '__main__':
     index.train(features, ownership)
 
     query_features = np.random.randn(15, 40)
+
     a = index.search(query_features)
+
+    answer = index.search(query_features)
+    print(answer)
+
