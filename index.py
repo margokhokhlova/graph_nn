@@ -37,7 +37,7 @@ class BagOfNodesIndex:
         self.index.train(index_features)
         self.index.add(index_features)
 
-        self.size = index_features.shape[0]
+        self.size = np.unique(self.index_ownership).shape[0]
 
     def search(self, query_features):
         """
@@ -80,8 +80,9 @@ class BagOfNodesIndex:
 if __name__ == '__main__':
     index = BagOfNodesIndex()
     features = np.random.randn(10000, 40)
-    ownership = np.arange(0, 10000)
+    ownership = np.array(4000*[0] + 4000*[1] + 2000*[2])
     index.train(features, ownership)
 
     query_features = np.random.randn(15, 40)
-    print(index.search(query_features))
+    a = index.search(query_features)
+    qsqsdqs
