@@ -1,7 +1,7 @@
 import argparse
 from datetime import datetime
 from data_loader_siamese import *
-from knn_check import knn_distance_calculation
+from knn_check import knn_distance_calculation, map_for_dataset
 from models import GCN_unwrapped, GCN
 from index import BagOfNodesIndex
 # NN layers and models
@@ -161,12 +161,16 @@ if __name__ == '__main__':
         indexer =BagOfNodesIndex(dimension=emb04.shape[1])
         indexer.train(emb04, gt04)
         unique_graphs = np.unique(gt19)
+        gt_19 = []
+        knn_array = []
         for i in unique_graphs:
             query_features = emb19[gt19==i]
             answer = indexer.search(query_features)
+            sorted(answer,key=lambda x: x[1], reverse = True) #sort the array
+            gt_19.append(i)
+            knn_array.append(answer[0][:args.N])  # workaround for structure
 
-
-        #map = knn_distance_calculation(query=emb04, database=emb19,gt_indexes2004 = gt04, gt_indexes2019=gt19, distance='cosine', N=args.N)
+        map = map_for_dataset(gt_19, knn_array)
         return map
 
     if args.features =='global':
