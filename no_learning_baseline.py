@@ -5,14 +5,18 @@ from knn_check import knn_distance_calculation, map_for_dataset
 from index import BagOfNodesIndex
 # NN layers and models
 
+
+
 def cross_val_map_local(data04,data19, dims = 17):
     features04 =np.empty((0, dims))
     features19 = np.empty((0, dims))
     gt04 =[]
     gt19 = []
+    dist_graphs = []      #to store the distinct graphs
     for i in range(len(data19.data['features_onehot'])):
         gt19 += [data19.data['targets'][i]]*len(data19.data['features_onehot'][i])
         features19 = np.vstack((features19, data19.data['features_onehot'][i]))
+        dist_graphs += [i]* len(data19.data['features_onehot'][i])
 
     for i in range(len(data04.data['features_onehot'])):
         gt04+=[data04.data['targets'][i]]*len(data04.data['features_onehot'][i])
@@ -20,21 +24,40 @@ def cross_val_map_local(data04,data19, dims = 17):
 
     indexer = BagOfNodesIndex(dimension=features04.shape[1], N_CENTROIDS = 128)
     indexer.train(features04, gt04)
-    unique_graphs = np.unique(gt19)
+    unique_graphs = np.unique(dist_graphs)
+    gt_gt19 = build_gt_voc(dist_graphs, gt19)
     gt_19 = []
     knn_array = []
     for i in unique_graphs:
-        query_features = features19[gt19 == i]
+        query_features = features19[dist_graphs == i]
         answer = indexer.search(query_features)
         sorted(answer, key=lambda x: x[1], reverse=True)  # sort the array
-        gt_19.append(i)
+        gt_19.append(gt_gt19[i])
         knn_array.append(answer[0][:args.N])  # workaround for structure
 
     map = map_for_dataset(gt_19, knn_array)
     return map
 
-
-
+def build_gt_voc(unique_graphs, gt):
+    ''' return a vocabulary matching gt zone labes with graph labels'''
+    gt_g = {}
+    for i in range(len(unique_graphs)):
+        if unique_graphs[i] not in gt_g:
+            gt_g[unique_graphs[i]] = gt[i]
+    return gt_g
+def get_graph_sep(gt):
+ ''' given the GT Y labels of the graphs, return the indexes of separate graphs'''
+ i = 0
+ dist_graphs = [0]
+ f = gt[0]
+ for j in range(1,len(gt)):
+     if gt[j]==f:
+         dist_graphs.append(i)
+     else:
+         i+=1
+         f=gt[j]
+         dist_graphs.append(i)
+ return dist_graphs
 
 if __name__ == '__main__':
     # Experiment parameters
