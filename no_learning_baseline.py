@@ -45,19 +45,6 @@ def build_gt_voc(unique_graphs, gt):
         if unique_graphs[i] not in gt_g:
             gt_g[unique_graphs[i]] = gt[i]
     return gt_g
-def get_graph_sep(gt):
- ''' given the GT Y labels of the graphs, return the indexes of separate graphs'''
- i = 0
- dist_graphs = [0]
- f = gt[0]
- for j in range(1,len(gt)):
-     if gt[j]==f:
-         dist_graphs.append(i)
-     else:
-         i+=1
-         f=gt[j]
-         dist_graphs.append(i)
- return dist_graphs
 
 if __name__ == '__main__':
     # Experiment parameters
@@ -65,7 +52,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--first_dataset', type=str, default='ign_2004',
                         help='Name of dataset number 1, should correspond to the folder with data')
-    parser.add_argument('--test_dataset', type=str, default='ign_2019',
+    parser.add_argument('--test_dataset', type=str, default='ign_2010',
                         help='Name of the matching dataset, should correspond to the folder with data')
     parser.add_argument('--batch-size', type=int, default=50, metavar='N',
                         help='input training batch-size')

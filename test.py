@@ -39,17 +39,17 @@ if __name__ == '__main__':
                         help='N in map@N')
 
     args = parser.parse_args()
-    datareader19 = DataReader(data_dir='./data/%s/' % args.first_dataset.upper(),
+    datareader19 = DataReader(data_dir='./data/IGN_all_clean/%s/' % args.first_dataset.upper(),
                             rnd_state=np.random.RandomState(args.seed),
                             folds=args.n_folds,
                             use_cont_node_attr=True)
 
 
-    datareader10 = DataReader(data_dir='./data/%s/' % args.test_dataset.upper(),
+    datareader10 = DataReader(data_dir='./data/IGN_all_clean/%s/' % args.test_dataset.upper(),
                               rnd_state=np.random.RandomState(args.seed),
                               folds=args.n_folds,
                               use_cont_node_attr=True)
-    # tensorboard
+
 
 
     # model definition
@@ -100,16 +100,17 @@ if __name__ == '__main__':
                 (features2019, features_2019.data.numpy()))  # (features_2019.reshape(features_2019.shape[0], emb_dim))
         return np.array(features2004), np.array(features2019), gt2004, gt2019
 
-    def unwrap_unmask(features, masks, gt):
+    def unwrap_unmask(features, masks, gt, counter=0):
         ''' function transforms the features from 3 dims [B, N, F] to 2 dims [N*B,F], N is number of nodes, B is
          the batch size and F is feature dimention.
         masks - whether the node is real or padded
         gt - gt graph label
         The artificial nodes are removed (we use zero-padding to train the model to have a constanst node number)
-        returns: new features, N*B ground truth labels.
+        returns: new features, N*B ground truth labels and graph_id (just an array with specification of nodes beloging to graphs
         '''
         f =[] #an array to store the final features
         new_gt = []
+        graph_id = []
         B,N,F = features.shape
         for i in range(B):
             feat = features[i]
@@ -118,7 +119,9 @@ if __name__ == '__main__':
                 if masks_graph[m]!=0:
                     f.append(feat[m,:])
                     new_gt.append(gt[i])
-        return f, new_gt
+                    graph_id.append(counter)
+            counter+=1
+        return f, new_gt, graph_id, counter
 
 
 
@@ -129,6 +132,8 @@ if __name__ == '__main__':
         features2019 = np.empty((0, dims))
         gt2004 = []
         gt2019 = []
+        dist_graphs = []
+        counter = 0
         for batch_idx, data in enumerate(train_loader):
             for i in range(len(data[0])):
                 data[0][i] = data[0][i].to(args.device)
@@ -142,37 +147,60 @@ if __name__ == '__main__':
             node_mask04 = data[0][2].numpy() # masks to remove the padding
             node_mask19 = data[1][2].numpy()
             # unwrap features and delete zero nodes
-            features_2004, gt_2004 = unwrap_unmask(features_2004,node_mask04, gt04)
-            features_2019, gt_2019 = unwrap_unmask(features_2019, node_mask19, gt19)
+            features_2004, gt_2004, _, _= unwrap_unmask(features_2004,node_mask04, gt04)
+            features_2019, gt_2019, graph_id, counter = unwrap_unmask(features_2019, node_mask19, gt19, counter)
             features2004 = np.vstack((features2004, features_2004))
             features2019 = np.vstack((features2019, features_2019))  # (features_2019.reshape(features_2019.shape[0], emb_dim))
             gt2004 += gt_2004
             gt2019 += gt_2019
-        return np.array(features2004), np.array(features2019), gt2004, gt2019
+            dist_graphs += graph_id
+        return np.array(features2004), np.array(features2019), gt2004, gt2019, dist_graphs
 
     def cross_val_map(loaders):
         'calculates the features of the graphs and then the map value'
         emb04, emb19, gt04, gt19 = calculate_features(loaders, args.emb_dim)
-        map = knn_distance_calculation(query=emb04, database=emb19,gt_indexes2004 = gt04, gt_indexes2019=gt19, distance='cosine', N=args.N)
-        return map
-    def cross_val_map_local(loaders):
-        'calculates the features of the graphs and then the map value'
-        emb04, emb19, gt04, gt19 = calculate_features_local(loaders, 512) #TODO make it as a parameter
-        indexer =BagOfNodesIndex(dimension=emb04.shape[1])
+        #map = knn_distance_calculation(query=emb04, database=emb19,gt_indexes2004 = gt04, gt_indexes2019=gt19, distance='cosine', N=args.N)
+        indexer = BagOfNodesIndex(dimension=emb04.shape[1], N_CENTROIDS=256)
         indexer.train(emb04, gt04)
         unique_graphs = np.unique(gt19)
         gt_19 = []
         knn_array = []
         for i in unique_graphs:
-            query_features = emb19[gt19==i]
+            query_features = emb19[gt19 == i]
             answer = indexer.search(query_features)
-            sorted(answer,key=lambda x: x[1], reverse = True) #sort the array
+            sorted(answer, key=lambda x: x[1], reverse=True)  # sort the array
             gt_19.append(i)
             knn_array.append(answer[0][:args.N])  # workaround for structure
 
         map = map_for_dataset(gt_19, knn_array)
         return map
+    def cross_val_map_local(loaders):
+        'calculates the features of the graphs and then the map value'
+        emb04, emb19, gt04, gt19, dist_graphs = calculate_features_local(loaders, 512) #TODO make it as a parameter
+        indexer =BagOfNodesIndex(dimension=emb04.shape[1], N_CENTROIDS = 128)
+        indexer.train(emb04, gt04)
+        unique_graphs = np.unique(dist_graphs)
+        gt_g = build_gt_voc(dist_graphs, gt19)
+        gt_19 = []
+        knn_array = []
+        for i in range(len(unique_graphs)):
+            query_features = emb19[dist_graphs==unique_graphs[i]]
+            answer = indexer.search(query_features)
+            sorted(answer,key=lambda x: x[1], reverse = True) #sort the array
+            gt_19.append(gt_g[unique_graphs[i]])
+            knn_array.append(answer[0][:args.N])  # workaround for structure
 
+        map = map_for_dataset(gt_19, knn_array)
+        return map
+
+
+    def build_gt_voc(unique_graphs, gt):
+        ''' return a vocabulary matching gt zone labes with graph labels'''
+        gt_g = {}
+        for i in range(len(unique_graphs)):
+            if unique_graphs[i] not in gt_g:
+                gt_g[unique_graphs[i]] = gt[i]
+        return gt_g
     if args.features =='global':
         model.load_state_dict(torch.load(args.load_model))
     else:
@@ -200,5 +228,7 @@ if __name__ == '__main__':
         map = cross_val_map_local(test_loaders[1])
     else:
         map = cross_val_map(test_loaders[1])
+    print(map)
     end = time.time()
     print('time to query all files %f seconds.' % (end - start))
+    print('it gives %f sec per query' % ((end - start) / len(datareader19.data['targets'])))
