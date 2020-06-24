@@ -11,7 +11,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--first_dataset', type=str, default='ign_2004',
                         help='Name of dataset number 1, should correspond to the folder with data')
-    parser.add_argument('--test_dataset', type=str, default='ign_2019',
+    parser.add_argument('--test_dataset', type=str, default='ign_2010',
                         help='Name of the matching dataset, should correspond to the folder with data')
     parser.add_argument('--emb_dim', type=int, default=256,
                         help='Feature output size (default: 128')
@@ -172,8 +172,7 @@ if __name__ == '__main__':
             answer = indexer.search(query_features)
             sorted(answer, key=lambda x: x[1], reverse=True)  # sort the array
             gt_19.append(i)
-            knn_array.append(answer[0][:args.N])  # workaround for structure
-
+            knn_array.append(answer[0][:args.N])  # workaround to get back GT labels
         map = map_for_dataset(gt_19, knn_array)
         return map
     def cross_val_map_local(loaders):
