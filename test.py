@@ -11,7 +11,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--first_dataset', type=str, default='ign_2004',
                         help='Name of dataset number 1, should correspond to the folder with data')
-    parser.add_argument('--test_dataset', type=str, default='ign_2010',
+    parser.add_argument('--test_dataset', type=str, default='ign_2019',
                         help='Name of the matching dataset, should correspond to the folder with data')
     parser.add_argument('--emb_dim', type=int, default=256,
                         help='Feature output size (default: 128')
@@ -132,8 +132,9 @@ if __name__ == '__main__':
         features2019 = np.empty((0, dims))
         gt2004 = []
         gt2019 = []
-        dist_graphs = []
-        counter = 0
+        dist_graphs_19 = []
+        dist_graphs_04 = []
+        counter, counter04 = 0,0
         for batch_idx, data in enumerate(train_loader):
             for i in range(len(data[0])):
                 data[0][i] = data[0][i].to(args.device)
@@ -147,14 +148,15 @@ if __name__ == '__main__':
             node_mask04 = data[0][2].numpy() # masks to remove the padding
             node_mask19 = data[1][2].numpy()
             # unwrap features and delete zero nodes
-            features_2004, gt_2004, _, _= unwrap_unmask(features_2004,node_mask04, gt04)
+            features_2004, gt_2004, graph_id_04, counter04= unwrap_unmask(features_2004,node_mask04, gt04, counter04)
             features_2019, gt_2019, graph_id, counter = unwrap_unmask(features_2019, node_mask19, gt19, counter)
             features2004 = np.vstack((features2004, features_2004))
             features2019 = np.vstack((features2019, features_2019))  # (features_2019.reshape(features_2019.shape[0], emb_dim))
             gt2004 += gt_2004
             gt2019 += gt_2019
-            dist_graphs += graph_id
-        return np.array(features2004), np.array(features2019), gt2004, gt2019, dist_graphs
+            dist_graphs_19 += graph_id
+            dist_graphs_04 +=graph_id_04
+        return np.array(features2004), np.array(features2019), gt2004, gt2019,  dist_graphs_04, dist_graphs_19
 
     def cross_val_map(loaders):
         'calculates the features of the graphs and then the map value'
@@ -176,19 +178,20 @@ if __name__ == '__main__':
         return map
     def cross_val_map_local(loaders):
         'calculates the features of the graphs and then the map value'
-        emb04, emb19, gt04, gt19, dist_graphs = calculate_features_local(loaders, 512) #TODO make it as a parameter
+        emb04, emb19, gt04, gt19, dist_graphs04, dist_graphs19 = calculate_features_local(loaders, 512) #TODO make it as a parameter
         indexer =BagOfNodesIndex(dimension=emb04.shape[1], N_CENTROIDS = 128)
-        indexer.train(emb04, gt04)
-        unique_graphs = np.unique(dist_graphs)
-        gt_g = build_gt_voc(dist_graphs, gt19)
+        indexer.train(emb04, dist_graphs04)
+        unique_graphs = np.unique(dist_graphs19)
+        gt_gt19 = build_gt_voc(dist_graphs19, gt19)
+        gt_gt04 = build_gt_voc(dist_graphs04, gt04)
         gt_19 = []
         knn_array = []
-        for i in range(len(unique_graphs)):
-            query_features = emb19[dist_graphs==unique_graphs[i]]
+        for i in unique_graphs:
+            query_features = emb19[dist_graphs19 == i]
             answer = indexer.search(query_features)
-            sorted(answer,key=lambda x: x[1], reverse = True) #sort the array
-            gt_19.append(gt_g[unique_graphs[i]])
-            knn_array.append(answer[0][:args.N])  # workaround for structure
+            sorted(answer, key=lambda x: x[1], reverse=True)  # sort the array
+            gt_19.append(gt_gt19[i])
+            knn_array.append([gt_gt04[a] for a in answer[0][:args.N]])  # workaround for structure
 
         map = map_for_dataset(gt_19, knn_array)
         return map

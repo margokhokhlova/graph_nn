@@ -12,28 +12,29 @@ def cross_val_map_local(data04,data19, dims = 17):
     features19 = np.empty((0, dims))
     gt04 =[]
     gt19 = []
-    dist_graphs = []      #to store the distinct graphs
+    dist_graphs_19 = []      #to store the distinct graphs
     for i in range(len(data19.data['features_onehot'])):
         gt19 += [data19.data['targets'][i]]*len(data19.data['features_onehot'][i])
         features19 = np.vstack((features19, data19.data['features_onehot'][i]))
-        dist_graphs += [i]* len(data19.data['features_onehot'][i])
-
+        dist_graphs_19 += [i]* len(data19.data['features_onehot'][i])
+    dist_graphs_04 = []  #to store the distinct graphs
     for i in range(len(data04.data['features_onehot'])):
         gt04+=[data04.data['targets'][i]]*len(data04.data['features_onehot'][i])
         features04 = np.vstack((features04, data04.data['features_onehot'][i]))
-
+        dist_graphs_04 += [i]* len(data04.data['features_onehot'][i])
     indexer = BagOfNodesIndex(dimension=features04.shape[1], N_CENTROIDS = 128)
-    indexer.train(features04, gt04)
-    unique_graphs = np.unique(dist_graphs)
-    gt_gt19 = build_gt_voc(dist_graphs, gt19)
+    indexer.train(features04, dist_graphs_04)
+    unique_graphs = np.unique(dist_graphs_19)
+    gt_gt19 = build_gt_voc(dist_graphs_19, gt19)
+    gt_gt04 = build_gt_voc(dist_graphs_04, gt04)
     gt_19 = []
     knn_array = []
     for i in unique_graphs:
-        query_features = features19[dist_graphs == i]
+        query_features = features19[dist_graphs_19 == i]
         answer = indexer.search(query_features)
         sorted(answer, key=lambda x: x[1], reverse=True)  # sort the array
         gt_19.append(gt_gt19[i])
-        knn_array.append(answer[0][:args.N])  # workaround for structure
+        knn_array.append([gt_gt04[a] for a in answer[0][:args.N]])  # workaround for structure
 
     map = map_for_dataset(gt_19, knn_array)
     return map
@@ -50,9 +51,9 @@ if __name__ == '__main__':
     # Experiment parameters
     parser = argparse.ArgumentParser(description='contrastive_GCN')
 
-    parser.add_argument('--first_dataset', type=str, default='ign_2004',
+    parser.add_argument('--first_dataset', type=str, default='ign_2010',
                         help='Name of dataset number 1, should correspond to the folder with data')
-    parser.add_argument('--test_dataset', type=str, default='ign_2010',
+    parser.add_argument('--test_dataset', type=str, default='ign_2004',
                         help='Name of the matching dataset, should correspond to the folder with data')
     parser.add_argument('--batch-size', type=int, default=50, metavar='N',
                         help='input training batch-size')

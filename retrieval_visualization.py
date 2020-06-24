@@ -189,92 +189,20 @@ def read_data(
     else:
         return Bunch(data=Gs)
 
-def cross_val_map_local(data04, data19, dims=17):
-    features04 = np.empty((0, dims))
-    features19 = np.empty((0, dims))
-    gt04 = []
-    gt19 = []
-    dist_graphs = []  # to store the distinct graphs   - since we can get Y labels which repeat
-    for i in range(len(data19.data['features_onehot'])):
-        gt19 += [data19.data['targets'][i]] * len(data19.data['features_onehot'][i])
-        features19 = np.vstack((features19, data19.data['features_onehot'][i]))
-        dist_graphs += [i] * len(data19.data['features_onehot'][i])
-
-    for i in range(len(data04.data['features_onehot'])):
-        gt04 += [data04.data['targets'][i]] * len(data04.data['features_onehot'][i])
-        features04 = np.vstack((features04, data04.data['features_onehot'][i]))
-
-    indexer = BagOfNodesIndex(dimension=features04.shape[1], N_CENTROIDS=128)
-    indexer.train(features04, gt04)
-    unique_graphs = np.unique(dist_graphs)
-    gt_gt19 = build_gt_voc(dist_graphs, gt19)
-    gt_19 = []
-    knn_array = []
-    for i in unique_graphs:
-        query_features = features19[gt19 == i]
-        answer = indexer.search(query_features)
-        sorted(answer, key=lambda x: x[1],
-               reverse=True)  # sort the array
-        gt_19.append(gt_gt19[i])  
-        knn_array.append(
-            answer[0][:args.N])  # workaround for structure
-
-    map = map_for_dataset(gt_19, knn_array)
-    return map
-
-def build_gt_voc(unique_graphs, gt):
-    ''' return a vocabulary matching gt zone labes with graph labels'''
-    gt_g = {}
-    for i in range(len(unique_graphs)):
-        if unique_graphs[i] not in gt_g:
-            gt_g[unique_graphs[i]] = gt[i]
-    return gt_g
-
-def get_graph_sep(gt):
-    ''' given the GT Y labels of the graphs, return the indexes of separate graphs'''
-    i = 0
-    dist_graphs = [0]
-    f = gt[0]
-    for j in range(1,len(gt)):
-        if gt[j]==f:
-            dist_graphs.append(i)
-        else:
-            i+=1
-            f=gt[j]
-            dist_graphs.append(i)
-    return dist_graphs
-
-def calculate_features(data04, data19, dims=17):
-    ''' just calculates local features'''
-    features04 = np.empty((0, dims))
-    features19 = np.empty((0, dims))
-    gt04 = []
-    gt19 = []
-    for i in range(len(data19.data['features_onehot'])):
-        gt19 += [data19.data['targets'][i]] * len(data19.data['features_onehot'][i])
-        features19 = np.vstack((features19, data19.data['features_onehot'][i]))
-
-    for i in range(len(data04.data['features_onehot'])):
-        gt04 += [data04.data['targets'][i]] * len(data04.data['features_onehot'][i])
-        features04 = np.vstack((features04, data04.data['features_onehot'][i]))
 
 
-    return features19, features04, gt19, gt04
+def visualize_matches(index, knn_matches, gt19, dataset04, dataset19):
+    ''' a quick function to visualize the graphs
+    index - the index of the mathcing query
+    knn_matches  - return most similar graphs (labels)
+    gt19 - GT correspondences
+    datasets - datasets with nx graphs to display the result'''
+    query_result = knn_matches[index]
+    query_gt = gt[index]
+    # find the graphs which correspond to queris and GT and display them
 
 
-def visualize_matches(datareader19, datareader04, query_index, features19, features04, gt19, gt04, dims = 17, N=5):
-    ''' gets features, calculates the precion for N neighbors, displays the matches as nx graphs based on two dalatoladers'''
-    indexer = BagOfNodesIndex(dimension=features04.shape[1], N_CENTROIDS=128)
-    indexer.train(features04, gt04)
-    gt_19 = []
-    knn_array = []
-    query_features = features19[gt19 == query_index]
-    answer = indexer.search(query_features)
-    sorted(answer, key=lambda x: x[1],
-           reverse=True)  # sort the array
-    gt_19.append(i)
-    knn_array.append(
-        answer[0][:args.N])  # workaround for structure
+
 
 
 if __name__ == '__main__':
@@ -306,12 +234,85 @@ if __name__ == '__main__':
                               folds=args.n_folds,
                               use_cont_node_attr=True)
 
+
+    def cross_val_map_local(data04, data19, dims=17):
+        features04 = np.empty((0, dims))
+        features19 = np.empty((0, dims))
+        gt04 = []
+        gt19 = []
+        dist_graphs = []  # to store the distinct graphs
+        for i in range(len(data19.data['features_onehot'])):
+            gt19 += [data19.data['targets'][i]] * len(data19.data['features_onehot'][i])
+            features19 = np.vstack((features19, data19.data['features_onehot'][i]))
+            dist_graphs += [i] * len(data19.data['features_onehot'][i])
+
+        for i in range(len(data04.data['features_onehot'])):
+            gt04 += [data04.data['targets'][i]] * len(data04.data['features_onehot'][i])
+            features04 = np.vstack((features04, data04.data['features_onehot'][i]))
+
+        indexer = BagOfNodesIndex(dimension=features04.shape[1], N_CENTROIDS=128)
+        indexer.train(features04, gt04)
+        unique_graphs = np.unique(dist_graphs)
+        gt_gt19 = build_gt_voc(dist_graphs, gt19)
+        gt_19 = []
+        knn_array = []
+        for i in unique_graphs:
+            query_features = features19[dist_graphs == i]
+            answer = indexer.search(query_features)
+            sorted(answer, key=lambda x: x[1], reverse=True)  # sort the array
+            gt_19.append(gt_gt19[i])
+            knn_array.append(answer[0][:args.N])  # workaround for structure
+
+        map = map_for_dataset(gt_19, knn_array)
+        return map, knn_array, gt_19
+
+    def build_gt_voc(unique_graphs, gt):
+        ''' return a vocabulary matching gt zone labes with graph labels'''
+        gt_g = {}
+        for i in range(len(unique_graphs)):
+            if unique_graphs[i] not in gt_g:
+                gt_g[unique_graphs[i]] = gt[i]
+        return gt_g
+
+
+    args = parser.parse_args()
+    datareader19 = DataReader(data_dir='./data/IGN_all_clean/%s/' % args.first_dataset.upper(),
+                              rnd_state=np.random.RandomState(args.seed),
+                              folds=args.n_folds,
+                              use_cont_node_attr=True)
+
+    datareader10 = DataReader(data_dir='./data/IGN_all_clean/%s/' % args.test_dataset.upper(),
+                              rnd_state=np.random.RandomState(args.seed),
+                              folds=args.n_folds,
+                              use_cont_node_attr=True)
+
     start = time.time()
-    map = cross_val_map_local(datareader19, datareader10)
+    map, knn, gt = cross_val_map_local(datareader19, datareader10)
     print(map)
     end = time.time()
     print('final map@N is %f time to query all files %f seconds.' % (map, end - start))
     print('it gives %f sec per query' % ((end - start) / len(datareader19.data['targets'])))
 
-    # Visualization of the results on random queries
-    visualize_matches(datareader19, datareader10, query_index)
+
+    ## visualization part based on the KNN results
+
+    IGN19 = read_data(args.first_dataset.upper(),
+                      with_classes=True,
+                      prefer_attr_nodes=True,
+                      prefer_attr_edges=False,
+                      produce_labels_nodes=False,
+                      as_graphs=True,
+                      is_symmetric=symmetric_dataset,
+                      path='./data/IGN_all_clean/%s/')
+
+    IGN10 = read_data(args.test_dataset.upper(),
+                      with_classes=True,
+                      prefer_attr_nodes=True,
+                      prefer_attr_edges=False,
+                      produce_labels_nodes=False,
+                      as_graphs=True,
+                      is_symmetric=symmetric_dataset,
+                      path='./data/IGN_all_clean/%s/')
+
+    # now just go through the KNN and display the returned values and a true corresponding graph
+    visualize_matches(0, knn_matches,gt19, IGN19, IGN10)
