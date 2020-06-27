@@ -2,21 +2,17 @@ import numpy as np
 from sklearn.neighbors import NearestNeighbors
 
 def map_for_dataset(gt, returned_queries, distances = None):
-    ''' My implementation for the MAP, when the correct image is always a single image
-    input - list of gt labels gt and returned queries - list of lists of returned queries '''
+    ''' My implementation for the MAP function '''
     av_pr = 0
-    N = len(returned_queries[0])
+    N = len(returned_queries[0]) # N in map@N
     denominator = list(range(1,N+1))
     for i in range(len(gt)):
         query = np.ravel(returned_queries[i]).tolist()
         gt_query = gt[i]
         element_ranks = [i + 1 if j == gt_query else 0 for i, j in enumerate(query)]
-
         total_gt = sum(gt == gt_query)
-
         av_pr += 1/total_gt * sum(element_ranks[i]/denominator[i] for i, _ in enumerate(element_ranks))
 
-    # print("Ignored %d empty images" %images_to_ignore)
     return av_pr/len(gt)
 
 

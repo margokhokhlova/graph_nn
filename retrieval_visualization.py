@@ -1,7 +1,8 @@
 """The base file for loading default datasets."""
 import os
 import math
-
+import matplotlib
+matplotlib.use('tkagg')
 try:
     # Python 2
     from urllib2 import HTTPError
@@ -192,6 +193,7 @@ def read_data(
 
 
 
+
 def visualize_matches(index, knn_matches, gt19, dataset04, dataset19):
     ''' a quick function to visualize the graphs
     index - the index of the mathcing query int
@@ -203,14 +205,36 @@ def visualize_matches(index, knn_matches, gt19, dataset04, dataset19):
     # find the graphs which correspond to queris and GT and display them
     query_graph_index = np.where(dataset19.target==query_gt)[0][0] #take only one graph as a demo
     graph_query = dataset19.data[query_graph_index]
-    fig, axs = plt.subplots(1, 6,figsize=(18, 10))
-    nx.draw(graph_query, with_labels=True, ax=axs[0])
+    fig, axs = plt.subplots(1, 6,figsize=(20, 8))
+    nx.draw(graph_query, with_labels=True,node_color=[color_map[graph_query._node[node]['labels']] for node in  graph_query] , ax=axs[0])
     axs[0].set_title(f"Query graph, gt {query_gt}")
     for i in range(1,len(query_result)+1):
-        nx.draw(dataset04.data[np.where(dataset04.target==query_result[i])[0][0]], with_labels=True, ax=axs[i])
-        axs[0, i].set_title(f"gt {query_result[i]}")
-    plt.show()
+        graph = dataset04.data[np.where(dataset04.target==query_result[i-1])[0][0]]
+        #color_map = get_color_map(graph)
+        nx.draw(graph, with_labels=True, node_color=[color_map[graph._node[node]['labels']] for node in  graph], ax=axs[i])
+        axs[i].set_title(f"gt {query_result[i-1]}")
     fig.suptitle('Returned KNN-matches')
+    plt.show()
+
+color_map = {
+        0: 'green',
+        1: 'red',
+        2: 'brown',
+        3: 'violet',
+        4: 'yellow',
+        5: 'pink',
+        6: 'gray',
+        7: 'cyan',
+        8: 'gold',
+        9: 'salmon',
+        10: 'magenta',
+        11: 'indigo',
+        12: 'orange',
+        13: 'blue',
+        14: 'lilac'
+    }
+
+
 
 
 
@@ -302,18 +326,18 @@ if __name__ == '__main__':
 
     IGN19 = read_data('IGN04', #TODO fix this to make automatic
                       with_classes=True,
-                      prefer_attr_nodes=True,
+                      prefer_attr_nodes=False,
                       prefer_attr_edges=False,
-                      produce_labels_nodes=False,
+                      produce_labels_nodes=True,
                       as_graphs=True,
                       is_symmetric=symmetric_dataset,
                       path='./data/IGN_all_clean/%s/'% args.first_dataset.upper())
 
     IGN10 = read_data('IGN19',
                       with_classes=True,
-                      prefer_attr_nodes=True,
+                      prefer_attr_nodes=False,
                       prefer_attr_edges=False,
-                      produce_labels_nodes=False,
+                      produce_labels_nodes=True,
                       as_graphs=True,
                       is_symmetric=symmetric_dataset,
                       path='./data/IGN_all_clean/%s/' % args.test_dataset.upper())

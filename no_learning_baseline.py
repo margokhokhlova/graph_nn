@@ -8,13 +8,17 @@ from index import BagOfNodesIndex
 
 
 def cross_val_map_local(data04,data19, dims = 17):
+    ''' a function to extract features from the graphs (attributes), then similarity search is perfromed using faiss
+    Attributes: dataloaders for 2 distinc dates
+    dims - num of dimensions for each node attribute
+    Output: map@5 value'''
     features04 =np.empty((0, dims))
     features19 = np.empty((0, dims))
     gt04 =[]
     gt19 = []
     dist_graphs_19 = []      #to store the distinct graphs
     for i in range(len(data19.data['features_onehot'])):
-        gt19 += [data19.data['targets'][i]]*len(data19.data['features_onehot'][i])
+        gt19 += [data19.data['targets'][i]]*len(data19.data['features_onehot'][i])        # label for each node
         features19 = np.vstack((features19, data19.data['features_onehot'][i]))
         dist_graphs_19 += [i]* len(data19.data['features_onehot'][i])
     dist_graphs_04 = []  #to store the distinct graphs
@@ -22,17 +26,17 @@ def cross_val_map_local(data04,data19, dims = 17):
         gt04+=[data04.data['targets'][i]]*len(data04.data['features_onehot'][i])
         features04 = np.vstack((features04, data04.data['features_onehot'][i]))
         dist_graphs_04 += [i]* len(data04.data['features_onehot'][i])
-    indexer = BagOfNodesIndex(dimension=features04.shape[1], N_CENTROIDS = 128)
+    indexer = BagOfNodesIndex(dimension=features04.shape[1], N_CENTROIDS = 128)       #faiss similarity search
     indexer.train(features04, dist_graphs_04)
     unique_graphs = np.unique(dist_graphs_19)
-    gt_gt19 = build_gt_voc(dist_graphs_19, gt19)
+    gt_gt19 = build_gt_voc(dist_graphs_19, gt19)       # matching between unique graphs and labels, needed for map calc
     gt_gt04 = build_gt_voc(dist_graphs_04, gt04)
     gt_19 = []
-    knn_array = []
+    knn_array = []  #returned most similar indexes
     for i in unique_graphs:
         query_features = features19[dist_graphs_19 == i]
         answer = indexer.search(query_features)
-        sorted(answer, key=lambda x: x[1], reverse=True)  # sort the array
+        #sorted(answer, key=lambda x: x[1], reverse=True)  # sort the array -> actually, not needed, looks like faiss does it anyway
         gt_19.append(gt_gt19[i])
         knn_array.append([gt_gt04[a] for a in answer[0][:args.N]])  # workaround for structure
 
