@@ -321,38 +321,38 @@ if __name__ == '__main__':
         map = map_for_dataset(gt_19, knn_array)
         return map, knn_array, gt_19
 
-    def build_gt_voc(unique_graphs, gt):
+    def build_gt_voc(dist_graphs, gt):
         ''' return a vocabulary matching gt zone labes with graph labels'''
         gt_g = {}
-        for i in range(len(unique_graphs)):
-            if unique_graphs[i] not in gt_g:
-                gt_g[unique_graphs[i]] = gt[i]
+        for i in range(len(dist_graphs)):
+            if dist_graphs[i] not in gt_g:
+                gt_g[dist_graphs[i]] = gt[i]
         return gt_g
 
 
     args = parser.parse_args()
-    # datareader19 = DataReader(data_dir='./data/IGN_all_clean/%s/' % args.first_dataset.upper(),
-    #                           rnd_state=np.random.RandomState(args.seed),
-    #                           folds=args.n_folds,
-    #                           use_cont_node_attr=True)
-    #
-    # datareader10 = DataReader(data_dir='./data/IGN_all_clean/%s/' % args.test_dataset.upper(),
-    #                           rnd_state=np.random.RandomState(args.seed),
-    #                           folds=args.n_folds,
-    #                           use_cont_node_attr=True)
+    datareader04= DataReader(data_dir='./data/IGN_all_clean/%s/' % args.first_dataset.upper(),
+                              rnd_state=np.random.RandomState(args.seed),
+                              folds=args.n_folds,
+                              use_cont_node_attr=True)
 
-    # start = time.time()
-    # map, knn, gt = cross_val_map_local(datareader19, datareader10)
-    # print(map)
-    # end = time.time()
-    # print('final map@N is %f time to query all files %f seconds.' % (map, end - start))
-    # print('it gives %f sec per query' % ((end - start) / len(datareader19.data['targets'])))
+    datareader19 = DataReader(data_dir='./data/IGN_all_clean/%s/' % args.test_dataset.upper(),
+                              rnd_state=np.random.RandomState(args.seed),
+                              folds=args.n_folds,
+                              use_cont_node_attr=True)
+
+    start = time.time()
+    map, knn_matches, gt_19 = cross_val_map_local(datareader04, datareader19)
+    print(map)
+    end = time.time()
+    print('final map@N is %f time to query all files %f seconds.' % (map, end - start))
+    print('it gives %f sec per query' % ((end - start) / len(datareader19.data['targets'])))
 
 
     ## visualization part based on the KNN results
 
 
-    IGN19 = read_data('IGN04', #TODO fix this to make automatic
+    IGN04 = read_data('IGN04', #TODO fix this to make automatic
                       with_classes=True,
                       prefer_attr_nodes=True,
                       prefer_attr_edges=False,
@@ -361,7 +361,7 @@ if __name__ == '__main__':
                       is_symmetric=symmetric_dataset,
                       path='./data/IGN_all_clean/%s/'% args.first_dataset.upper())
 
-    IGN10 = read_data('IGN19',
+    IGN19 = read_data('IGN19',
                       with_classes=True,
                       prefer_attr_nodes=True,
                       prefer_attr_edges=False,
@@ -370,9 +370,9 @@ if __name__ == '__main__':
                       is_symmetric=symmetric_dataset,
                       path='./data/IGN_all_clean/%s/' % args.test_dataset.upper())
 
-
-    knn_matches = [[3846, 3949, 4012, 2323, 3891], [1939, 1503, 184, 4611, 5917], [3593, 200, 5956, 1290, 2476], [3983, 3447, 3725, 3569, 5940], [2402, 749, 2446, 2667, 541], [2548, 5868, 1670, 1164, 1664], [1085, 20, 2506, 3701, 2041], [1753, 3947, 3106, 3919, 3122], [4604, 297, 2024, 5305, 4763], [4086, 2738, 2679, 2762, 2527]]
-    gt19 = [2406, 654, 3593, 172, 2774, 4987, 1085, 4365, 5888, 2738]
+    #
+    # knn_matches = [[3846, 3949, 4012, 2323, 3891], [1939, 1503, 184, 4611, 5917], [3593, 200, 5956, 1290, 2476], [3983, 3447, 3725, 3569, 5940], [2402, 749, 2446, 2667, 541], [2548, 5868, 1670, 1164, 1664], [1085, 20, 2506, 3701, 2041], [1753, 3947, 3106, 3919, 3122], [4604, 297, 2024, 5305, 4763], [4086, 2738, 2679, 2762, 2527]]
+    # gt19 = [2406, 654, 3593, 172, 2774, 4987, 1085, 4365, 5888, 2738]
     # now just go through the KNN and display the returned values and a true corresponding graph
     #visualize_matches(0, knn_matches,gt19, IGN19, IGN10)
-    display_attribute_unions(2, knn_matches,gt19, IGN19, IGN10)
+    display_attribute_unions(2, knn_matches,gt_19, IGN04,IGN19)
