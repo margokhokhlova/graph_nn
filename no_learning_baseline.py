@@ -55,9 +55,9 @@ if __name__ == '__main__':
     # Experiment parameters
     parser = argparse.ArgumentParser(description='contrastive_GCN')
 
-    parser.add_argument('--first_dataset', type=str, default='ign_2010',
+    parser.add_argument('--first_dataset', type=str, default='ign_2004',
                         help='Name of dataset number 1, should correspond to the folder with data')
-    parser.add_argument('--test_dataset', type=str, default='ign_2004',
+    parser.add_argument('--test_dataset', type=str, default='ign_2014',
                         help='Name of the matching dataset, should correspond to the folder with data')
     parser.add_argument('--batch-size', type=int, default=50, metavar='N',
                         help='input training batch-size')

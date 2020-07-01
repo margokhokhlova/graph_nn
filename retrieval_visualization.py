@@ -129,7 +129,7 @@ def read_data(
                     [float(num) for num in
                      line[:-1].replace(' ', '').split(",")]
                 #if np.isnan(node_labels[ngc[i]][i]).any():  # then there are None values
-                node_labels[ngc[i]][i] = [0.00 if math.isnan(x) else x for x in node_labels[ngc[i]][i]][:]  # remove NaNs and take only 3 first
+                node_labels[ngc[i]][i] = [0.00 if math.isnan(x) else x for x in node_labels[ngc[i]][i]][:]  # remove NaNs and take only 2 last
 
                 #node_labels[ngc[i]][i] = [x for x in node_labels[ngc[i]][i][1:2]]  # remove NaNs
     # Extract node labels
@@ -235,6 +235,34 @@ color_map = {
     }
 
 
+def display_attribute_unions(index, knn_matches, gt19, dataset04, dataset19):
+    ''' a quick function to display the common sets of attributes in the matched graphs
+    index - the index of the mathcing query int
+    knn_matches  - returned most similar graphs (labels) [[]]
+    gt19 - GT correspondences []
+    datasets - datasets with nx graphs to display the result - custom class'''
+    query_result = knn_matches[index]
+    query_gt = gt19[index]
+    # find the graphs which correspond to queris and GT and display them
+    query_graph_index = np.where(dataset19.target==query_gt)[0][0] #take only one graph as a demo
+    graph_query = dataset19.data[query_graph_index]
+    attributes_query = list(nx.get_node_attributes(graph_query, 'labels').values())
+    for i in range(0,len(query_result)):
+        graph = dataset04.data[np.where(dataset04.target == query_result[i])[0][0]]
+        attributes_match = list(nx.get_node_attributes(graph, 'labels').values())
+        intersection = np.intersect1d(np.around(attributes_query, d=1), np.around(attributes_match,1))#multidim_intersect(attributes_query, attributes_match)
+        print(f'Attributes similarity index for the {i+1}  returned match {len(intersection)/(len(graph_query.nodes)+len(graph.nodes))}')
+
+
+
+def multidim_intersect(arr1, arr2):
+    arr1_view = arr1.view([('', arr1.dtype)] * arr1.shape[1])
+    arr2_view = arr2.view([('', arr2.dtype)] * arr2.shape[1])
+    intersected = np.intersect1d(arr1_view, arr2_view)
+    return intersected.view(arr1.dtype).reshape(-1, arr1.shape[1])
+
+
+
 
 
 
@@ -326,18 +354,18 @@ if __name__ == '__main__':
 
     IGN19 = read_data('IGN04', #TODO fix this to make automatic
                       with_classes=True,
-                      prefer_attr_nodes=False,
+                      prefer_attr_nodes=True,
                       prefer_attr_edges=False,
-                      produce_labels_nodes=True,
+                      produce_labels_nodes=False,
                       as_graphs=True,
                       is_symmetric=symmetric_dataset,
                       path='./data/IGN_all_clean/%s/'% args.first_dataset.upper())
 
     IGN10 = read_data('IGN19',
                       with_classes=True,
-                      prefer_attr_nodes=False,
+                      prefer_attr_nodes=True,
                       prefer_attr_edges=False,
-                      produce_labels_nodes=True,
+                      produce_labels_nodes=False,
                       as_graphs=True,
                       is_symmetric=symmetric_dataset,
                       path='./data/IGN_all_clean/%s/' % args.test_dataset.upper())
@@ -346,4 +374,5 @@ if __name__ == '__main__':
     knn_matches = [[3846, 3949, 4012, 2323, 3891], [1939, 1503, 184, 4611, 5917], [3593, 200, 5956, 1290, 2476], [3983, 3447, 3725, 3569, 5940], [2402, 749, 2446, 2667, 541], [2548, 5868, 1670, 1164, 1664], [1085, 20, 2506, 3701, 2041], [1753, 3947, 3106, 3919, 3122], [4604, 297, 2024, 5305, 4763], [4086, 2738, 2679, 2762, 2527]]
     gt19 = [2406, 654, 3593, 172, 2774, 4987, 1085, 4365, 5888, 2738]
     # now just go through the KNN and display the returned values and a true corresponding graph
-    visualize_matches(0, knn_matches,gt19, IGN19, IGN10)
+    #visualize_matches(0, knn_matches,gt19, IGN19, IGN10)
+    display_attribute_unions(2, knn_matches,gt19, IGN19, IGN10)
