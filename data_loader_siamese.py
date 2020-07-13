@@ -200,7 +200,7 @@ class DataReader():
                            'test': test_ids[fold]})
 
         data['features_onehot'] = features_onehot
-        data['targets'] = labels
+        #data['targets'] = labels
         data['splits'] = splits
         data['N_nodes_max'] = np.max(shapes)  # max number of nodes
         data['features_dim'] = features_dim
