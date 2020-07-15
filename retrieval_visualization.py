@@ -2,7 +2,8 @@
 import os
 import math
 import matplotlib
-matplotlib.use('tkagg')
+import shapely as shp
+import shapely.geometry as shgm
 try:
     # Python 2
     from urllib2 import HTTPError
@@ -33,7 +34,7 @@ def read_data(
         prefer_attr_edges=False,
         produce_labels_nodes=False,
         as_graphs=False,
-        is_symmetric=symmetric_dataset, path = None):
+        is_symmetric=symmetric_dataset, path = None, with_node_posistions=False):
     """Create a dataset iterable for GraphKernel.
 
     Parameters
@@ -83,7 +84,8 @@ def read_data(
         path + "/" + str(name) + "_edge_attributes.txt"
     graph_classes_path = \
         path + "/" + str(name) + "_graph_labels.txt"
-
+    node_positions_path = \
+        path + "/" + str(name) + "_node_positions.txt"
     # node graph correspondence
     ngc = dict()
     # edge line correspondence
@@ -94,6 +96,8 @@ def read_data(
     node_labels = dict()
     # dictionary of labels for edges
     edge_labels = dict()
+    #dictionary for positions
+    node_positions = dict()
 
     # Associate graphs nodes with indexes
     with open(indicator_path, "r") as f:
@@ -180,6 +184,23 @@ def read_data(
         for i in range(1, len(Graphs)+1):
             Gs.append([Graphs[i], node_labels[i], edge_labels[i]])
 
+    if with_node_posistions:
+        with open(node_positions_path, "r") as f:
+            for (i, line) in enumerate(f, 1):
+                positions = [float(num) for num in
+                     line.replace(' ', '').split(",")]
+                if ngc[i] not in node_positions:
+                    node_positions[ngc[i]]= {i:positions}
+                else:
+                    node_positions[ngc[i]].update({i:positions})#
+        classes = []
+        with open(graph_classes_path, "r") as f:
+            for line in f:
+                classes.append(int(line[:-1]) - 1)
+
+        classes = np.array(classes, dtype=np.int)
+        return Bunch(data=Gs, target=classes, positions = node_positions)
+
     if with_classes:
         classes = []
         with open(graph_classes_path, "r") as f:
@@ -193,7 +214,6 @@ def read_data(
 
 
 
-
 def visualize_matches(index, knn_matches, gt19, dataset04, dataset19):
     ''' a quick function to visualize the graphs
     index - the index of the mathcing query int
@@ -204,14 +224,17 @@ def visualize_matches(index, knn_matches, gt19, dataset04, dataset19):
     query_gt = gt19[index]
     # find the graphs which correspond to queris and GT and display them
     query_graph_index = np.where(dataset19.target==query_gt)[0][0] #take only one graph as a demo
+    query_graph_position = dataset19.positions[query_graph_index+1]
     graph_query = dataset19.data[query_graph_index]
     fig, axs = plt.subplots(1, 6,figsize=(20, 8))
-    nx.draw(graph_query, with_labels=True,node_color=[color_map[graph_query._node[node]['labels']] for node in  graph_query] , ax=axs[0])
+    nx.draw(graph_query, pos = query_graph_position, with_labels=False,node_color=[color_map[graph_query._node[node]['labels']] for node in  graph_query] , ax=axs[0])
     axs[0].set_title(f"Query graph, gt {query_gt}")
     for i in range(1,len(query_result)+1):
         graph = dataset04.data[np.where(dataset04.target==query_result[i-1])[0][0]]
+        returned_graph_position = dataset04.positions[1+np.where(dataset04.target==query_result[i-1])[0][0]]
         #color_map = get_color_map(graph)
-        nx.draw(graph, with_labels=True, node_color=[color_map[graph._node[node]['labels']] for node in  graph], ax=axs[i])
+        print(len(graph.nodes), len(returned_graph_position))
+        nx.draw(graph, pos=returned_graph_position, with_labels=False, node_color=[color_map[graph._node[node]['labels']] for node in  graph], ax=axs[i])
         axs[i].set_title(f"gt {query_result[i-1]}")
     fig.suptitle('Returned KNN-matches')
     plt.show()
@@ -233,6 +256,39 @@ color_map = {
         13: 'blue',
         14: 'lilac'
     }
+
+def visualize_matches_with_the_map(index, knn_matches, gt19, dataset04, dataset19):
+    ''' a quick function to visualize the graphs
+    index - the index of the mathcing query int
+    knn_matches  - returned most similar graphs (labels) [[]]
+    gt19 - GT correspondences []
+    datasets - datasets with nx graphs to display the result - custom class'''
+    query_result = knn_matches[index]
+    query_gt = gt19[index]
+    # find the graphs which correspond to queris and GT and display them
+    query_graph_index = np.where(dataset19.target==query_gt)[0][0] #take only one graph as a demo
+    query_graph_position = dataset19.positions[query_graph_index+1]
+    polygon = minimum_rotated_rectangle_on_graph(query_graph_position)
+    graph_query = dataset19.data[query_graph_index]
+    fig, axs = plt.subplots(1, 6,figsize=(20, 8))
+    nx.draw(graph_query, pos = query_graph_position, with_labels=False,node_color=[color_map[graph_query._node[node]['labels']] for node in  graph_query] , ax=axs[0])
+    axs[0].set_title(f"Query graph, gt {query_gt}")
+    for i in range(1,len(query_result)+1):
+        graph = dataset04.data[np.where(dataset04.target==query_result[i-1])[0][0]]
+        returned_graph_position = dataset04.positions[1+np.where(dataset04.target==query_result[i-1])[0][0]]
+        #color_map = get_color_map(graph)
+        print(len(graph.nodes), len(returned_graph_position))
+        nx.draw(graph, pos=returned_graph_position, with_labels=False, node_color=[color_map[graph._node[node]['labels']] for node in  graph], ax=axs[i])
+        axs[i].set_title(f"gt {query_result[i-1]}")
+    fig.suptitle('Returned KNN-matches')
+    plt.show()
+
+def minimum_rotated_rectangle_on_graph(graph_positions):
+    ''' this function takes a dictionary with node coordinates as the attributes and
+    returnes the shapely polygon around it'''
+    point = shgm.MultiPoint(list(graph_positions.values()))
+    minimal_polygon = point.minimum_rotated_rectangle
+    return minimal_polygon
 
 
 def display_attribute_unions(index, knn_matches, gt19, dataset04, dataset19):
@@ -331,25 +387,25 @@ if __name__ == '__main__':
 
 
     args = parser.parse_args()
-    datareader04= DataReader(data_dir='./data/IGN_all_clean/%s/' % args.first_dataset.upper(),
-                              rnd_state=np.random.RandomState(args.seed),
-                              folds=args.n_folds,
-                              use_cont_node_attr=True)
-
-    datareader19 = DataReader(data_dir='./data/IGN_all_clean/%s/' % args.test_dataset.upper(),
-                              rnd_state=np.random.RandomState(args.seed),
-                              folds=args.n_folds,
-                              use_cont_node_attr=True)
-
-    start = time.time()
-    map, knn_matches, gt_19 = cross_val_map_local(datareader04, datareader19)
-    print(map)
-    end = time.time()
-    print('final map@N is %f time to query all files %f seconds.' % (map, end - start))
-    print('it gives %f sec per query' % ((end - start) / len(datareader19.data['targets'])))
-
-
-    ## visualization part based on the KNN results
+    # datareader04= DataReader(data_dir='./data/IGN_final/57_67/%s/' % args.first_dataset.upper(),
+    #                           rnd_state=np.random.RandomState(args.seed),
+    #                           folds=args.n_folds,
+    #                           use_cont_node_attr=True)
+    #
+    # datareader19 = DataReader(data_dir='./data/IGN_all_clean/%s/' % args.test_dataset.upper(),
+    #                           rnd_state=np.random.RandomState(args.seed),
+    #                           folds=args.n_folds,
+    #                           use_cont_node_attr=True)
+    #
+    # start = time.time()
+    # map, knn_matches, gt_19 = cross_val_map_local(datareader04, datareader19)
+    # print(map)
+    # end = time.time()
+    # print('final map@N is %f time to query all files %f seconds.' % (map, end - start))
+    # print('it gives %f sec per query' % ((end - start) / len(datareader19.data['targets'])))
+    #
+    #
+    # ## visualization part based on the KNN results
 
 
     IGN04 = read_data('IGN04', #TODO fix this to make automatic
@@ -359,7 +415,7 @@ if __name__ == '__main__':
                       produce_labels_nodes=False,
                       as_graphs=True,
                       is_symmetric=symmetric_dataset,
-                      path='./data/IGN_all_clean/%s/'% args.first_dataset.upper())
+                      path='./data/IGN_final/57_67/%s/'% args.first_dataset.upper(), with_node_posistions = True)
 
     IGN19 = read_data('IGN19',
                       with_classes=True,
@@ -368,11 +424,11 @@ if __name__ == '__main__':
                       produce_labels_nodes=False,
                       as_graphs=True,
                       is_symmetric=symmetric_dataset,
-                      path='./data/IGN_all_clean/%s/' % args.test_dataset.upper())
+                      path='./data/IGN_final/57_67/%s/' % args.test_dataset.upper(), with_node_posistions = True)
 
     #
-    # knn_matches = [[3846, 3949, 4012, 2323, 3891], [1939, 1503, 184, 4611, 5917], [3593, 200, 5956, 1290, 2476], [3983, 3447, 3725, 3569, 5940], [2402, 749, 2446, 2667, 541], [2548, 5868, 1670, 1164, 1664], [1085, 20, 2506, 3701, 2041], [1753, 3947, 3106, 3919, 3122], [4604, 297, 2024, 5305, 4763], [4086, 2738, 2679, 2762, 2527]]
-    # gt19 = [2406, 654, 3593, 172, 2774, 4987, 1085, 4365, 5888, 2738]
-    # now just go through the KNN and display the returned values and a true corresponding graph
-    #visualize_matches(0, knn_matches,gt19, IGN19, IGN10)
+    knn_matches = [[3846, 3949, 4012, 2323, 3891], [1939, 1503, 184, 4611, 5917], [3593, 200, 5956, 1290, 2476], [3983, 3447, 3725, 3569, 5940], [2402, 749, 2446, 2667, 541], [2548, 5868, 1670, 1164, 1664], [1085, 20, 2506, 3701, 2041], [1753, 3947, 3106, 3919, 3122], [4604, 297, 2024, 5305, 4763], [4086, 2738, 2679, 2762, 2527]]
+    gt19 = [2406, 654, 3593, 172, 2774, 4987, 1085, 4365, 5888, 2738]
+    #now just go through the KNN and display the returned values and a true corresponding graph
+    visualize_matches_with_the_map(0, knn_matches,gt19, IGN04, IGN19)
     display_attribute_unions(2, knn_matches,gt_19, IGN04,IGN19)
