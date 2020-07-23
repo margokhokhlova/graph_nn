@@ -20,12 +20,16 @@ from knn_check import knn_distance_calculation, map_for_dataset
 from index import BagOfNodesIndex
 
 from collections import Counter
+import pandas as pd
+import geopandas as gpd
 
 from sklearn.utils import Bunch
 
 import networkx as nx
 global symmetric_dataset
 symmetric_dataset =1
+from earthpy import clip as cl
+
 
 def read_data(
         name,
@@ -270,18 +274,29 @@ def visualize_matches_with_the_map(index, knn_matches, gt19, dataset04, dataset1
     query_graph_position = dataset19.positions[query_graph_index+1]
     polygon = minimum_rotated_rectangle_on_graph(query_graph_position)
     graph_query = dataset19.data[query_graph_index]
-    fig, axs = plt.subplots(1, 6,figsize=(20, 8))
-    nx.draw(graph_query, pos = query_graph_position, with_labels=False,node_color=[color_map[graph_query._node[node]['labels']] for node in  graph_query] , ax=axs[0])
-    axs[0].set_title(f"Query graph, gt {query_gt}")
+    BD_topo = return_df(polygon, False)
+    fig, axs = plt.subplots(1, 6,figsize=(20, 5))
+    plot_data(graph_query, query_graph_position, BD_topo, axs[0],  f"Query graph, gt {query_gt}")
     for i in range(1,len(query_result)+1):
         graph = dataset04.data[np.where(dataset04.target==query_result[i-1])[0][0]]
         returned_graph_position = dataset04.positions[1+np.where(dataset04.target==query_result[i-1])[0][0]]
-        #color_map = get_color_map(graph)
-        print(len(graph.nodes), len(returned_graph_position))
-        nx.draw(graph, pos=returned_graph_position, with_labels=False, node_color=[color_map[graph._node[node]['labels']] for node in  graph], ax=axs[i])
-        axs[i].set_title(f"gt {query_result[i-1]}")
+        polygon = minimum_rotated_rectangle_on_graph(returned_graph_position)
+        BD_topo_bd = return_df(polygon, True)
+        plot_data(graph, returned_graph_position, BD_topo_bd, axs[i],  f"gt {query_result[i-1]}")
+#         nx.draw(graph, pos=returned_graph_position, with_labels=False, node_color=[color_map[graph._node[node]['labels']] for node in  graph], ax=axs[i])
+#         axs[i].set_title()
     fig.suptitle('Returned KNN-matches')
     plt.show()
+
+def plot_data(graph, pos, BD_topo, ax, title):
+    ' takes the graph, BD topo and axis and plots'
+    BD_topo.roads.plot(linewidth=2.0, edgecolor='#FFA500', color='#FFA500', alpha = 0.5, ax=ax)
+    BD_topo.houses.plot(color='#FF0000', alpha = 0.5, ax=ax)
+    BD_topo.water.plot(linewidth=2.0, color='#0000FF', ax=ax)
+    BD_topo.railroads.plot(linewidth=2.0, color='#FF00FF', ax=ax)
+    BD_topo.rem_houses.plot(color='#FFFF00', ax=ax)
+    nx.draw(graph, pos = pos, with_labels=False,node_color=[color_map[graph._node[node]['labels']] for node in  graph] , ax=ax)
+    ax.set_title(title)
 
 def minimum_rotated_rectangle_on_graph(graph_positions):
     ''' this function takes a dictionary with node coordinates as the attributes and
@@ -318,11 +333,27 @@ def multidim_intersect(arr1, arr2):
     return intersected.view(arr1.dtype).reshape(-1, arr1.shape[1])
 
 
+def return_df(rectangle, f_year = True):
+    ''' will return the geographic objects inside the polygon
+    input is a shapely polygon, output is a Bunch of pandas dataframes for each category
+    first and second year data are global - they are big and heavy DF'''
+    if f_year:
+        sg_houses = clip_data(first_year.buildings, rectangle)
+        sg_water = clip_data(first_year.rivers, rectangle)
+        sg_rem_houses = clip_data(first_year.build_reml, rectangle)
+        sg_roads = clip_data(first_year.roads, rectangle)
+        sg_railroads = clip_data(first_year.rail, rectangle)
+    else:
+        sg_houses = clip_data(second_year.buildings, rectangle)
+        sg_water = clip_data(second_year.rivers, rectangle)
+        sg_rem_houses = clip_data(second_year.build_reml, rectangle)
+        sg_roads = clip_data(second_year.roads, rectangle)
+        sg_railroads = clip_data(second_year.rail, rectangle)
+    return Bunch(houses = sg_houses, water = sg_water, rem_houses = sg_rem_houses, roads = sg_roads, railroads = sg_railroads)
 
-
-
-
-
+def clip_data(pd_obj, pd_polyg):
+    sg =gpd.clip(pd_obj,pd_polyg) #extract segments of roads
+    return sg
 
 
 if __name__ == '__main__':
